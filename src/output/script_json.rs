@@ -26,6 +26,8 @@ pub struct ScriptMetadata {
     pub address: u64,
     #[serde(rename = "Name")]
     pub name: String,
+    #[serde(rename = "Signature", skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

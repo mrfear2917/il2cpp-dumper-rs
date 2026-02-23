@@ -43,6 +43,7 @@ pub struct Il2Cpp {
     field_offsets_are_pointers: bool,
     type_dic: HashMap<u64, usize>,
     pub va_segments: Vec<VaSegment>,
+    pub rgctxs_dictionary: HashMap<String, HashMap<u32, Vec<Il2CppRGCTXDefinition>>>,
 }
 
 impl Il2Cpp {
@@ -74,6 +75,7 @@ impl Il2Cpp {
             field_offsets_are_pointers: false,
             type_dic: HashMap::new(),
             va_segments: Vec::new(),
+            rgctxs_dictionary: HashMap::new(),
         }
     }
 
@@ -114,6 +116,7 @@ impl Il2Cpp {
                 memsz: s.p_memsz,
                 offset: s.p_offset,
             }).collect(),
+            rgctxs_dictionary: elf.rgctxs_dictionary.clone(),
         }
     }
 
@@ -372,5 +375,36 @@ impl Il2Cpp {
             }
         }
         Err(Error::AddressNotMapped(addr))
+    }
+
+    pub fn map_rtva(&self, offset: u64) -> u64 {
+        for seg in &self.va_segments {
+            if offset >= seg.offset && offset <= seg.offset + seg.memsz {
+                return offset - seg.offset + seg.vaddr;
+            }
+        }
+        0
+    }
+
+    pub fn read_generic_class(&mut self, addr: u64) -> Result<Il2CppGenericClass> {
+        let offset = self.map_vatr(addr)?;
+        self.stream.set_position(offset);
+        Il2CppGenericClass::read(&mut self.stream, self.version)
+    }
+
+    pub fn read_generic_inst(&mut self, addr: u64) -> Result<Il2CppGenericInst> {
+        let offset = self.map_vatr(addr)?;
+        self.stream.set_position(offset);
+        Il2CppGenericInst::read(&mut self.stream)
+    }
+
+    pub fn read_ptr_array(&mut self, addr: u64, count: u64) -> Result<Vec<u64>> {
+        let offset = self.map_vatr(addr)?;
+        self.stream.set_position(offset);
+        let mut result = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            result.push(self.stream.read_ptr()?);
+        }
+        Ok(result)
     }
 }

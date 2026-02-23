@@ -111,6 +111,13 @@ fn init_elf(data: Vec<u8>, metadata: &Metadata, config: &Config) -> Result<Il2Cp
     let code_reg = helper.find_code_registration();
     let metadata_reg = helper.find_metadata_registration();
 
+    if let Some(cr) = code_reg {
+        println!("CodeRegistration : 0x{cr:x}");
+    }
+    if let Some(mr) = metadata_reg {
+        println!("MetadataRegistration : 0x{mr:x}");
+    }
+
     let mut found = elf.auto_plus_init(code_reg, metadata_reg)?;
 
     if !found {
@@ -175,6 +182,8 @@ fn init_pe(data: Vec<u8>, metadata: &Metadata, config: &Config) -> Result<Il2Cpp
         let code_reg = helper.find_code_registration();
         let metadata_reg = helper.find_metadata_registration();
         if let (Some(cr), Some(mr)) = (code_reg, metadata_reg) {
+            println!("CodeRegistration : 0x{cr:x}");
+            println!("MetadataRegistration : 0x{mr:x}");
             cr_addr = cr;
             mr_addr = mr;
         }
@@ -241,6 +250,8 @@ fn init_macho(data: Vec<u8>, metadata: &Metadata, config: &Config) -> Result<Il2
         let code_reg = helper.find_code_registration();
         let metadata_reg = helper.find_metadata_registration();
         if let (Some(cr), Some(mr)) = (code_reg, metadata_reg) {
+            println!("CodeRegistration : 0x{cr:x}");
+            println!("MetadataRegistration : 0x{mr:x}");
             cr_addr = cr;
             mr_addr = mr;
         }

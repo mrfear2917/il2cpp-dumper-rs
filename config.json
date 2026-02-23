@@ -6,6 +6,7 @@
     "dumpFieldOffset": true,
     "dumpMethodOffset": true,
     "dumpTypeDefIndex": true,
+    "dumpAssemblyName": true,
     "generateDummyDll": true,
     "generateStruct": true,
     "dummyDllAddToken": true,

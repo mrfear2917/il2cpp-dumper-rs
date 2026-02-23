@@ -39,6 +39,7 @@ pub struct Metadata {
     param_default_values: HashMap<i32, Il2CppParameterDefaultValue>,
     attribute_type_ranges_dic: HashMap<usize, HashMap<u32, usize>>,
     string_cache: HashMap<i32, String>,
+    pub rgctx_entries: Vec<Il2CppRGCTXDefinition>,
 }
 
 impl Metadata {
@@ -93,6 +94,7 @@ impl Metadata {
             param_default_values: HashMap::new(),
             attribute_type_ranges_dic: HashMap::new(),
             string_cache: HashMap::new(),
+            rgctx_entries: Vec::new(),
         };
 
         meta.detect_subversion()?;

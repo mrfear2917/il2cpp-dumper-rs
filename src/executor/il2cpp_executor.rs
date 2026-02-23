@@ -178,7 +178,7 @@ impl Il2CppExecutor {
                         }
                     };
 
-                    let td = self.get_generic_class_type_definition(&gc, metadata, il2cpp);
+                    let td = self.get_generic_class_type_definition(&gc, metadata, il2cpp).map(|(td, _)| td);
                     (td, Some(gc))
                 } else {
                     let td = self.get_type_definition_from_type(il2cpp_type, metadata, il2cpp);
@@ -520,22 +520,24 @@ impl Il2CppExecutor {
         self.modifier_cache.get(&flags).unwrap()
     }
 
-    fn get_generic_class_type_definition(
+    pub fn get_generic_class_type_definition(
         &self,
         generic_class: &Il2CppGenericClass,
         metadata: &Metadata,
         il2cpp: &Il2Cpp,
-    ) -> Option<Il2CppTypeDefinition> {
+    ) -> Option<(Il2CppTypeDefinition, usize)> {
         if il2cpp.version >= 27.0 {
-            if let Some(t) = il2cpp.get_il2cpp_type(generic_class.type_ptr) {
-                return self.get_type_definition_from_il2cpp_type(t, metadata, il2cpp);
+            let il2cpp_type = il2cpp.get_il2cpp_type(generic_class.type_ptr)?;
+            let klass_idx = il2cpp_type.klass_index() as usize;
+            metadata.type_defs.get(klass_idx).map(|td| (td.clone(), klass_idx))
+        } else {
+            let idx = generic_class.type_definition_index;
+            if idx == u32::MAX as u64 || idx == u64::MAX || idx == 0 {
+                return None;
             }
-            return None;
+            let idx = idx as usize;
+            metadata.type_defs.get(idx).map(|td| (td.clone(), idx))
         }
-        if generic_class.type_definition_index == 0 || generic_class.type_definition_index as u64 == u64::MAX {
-            return None;
-        }
-        metadata.type_defs.get(generic_class.type_definition_index as usize).cloned()
     }
 
     fn get_type_definition_from_type(
@@ -589,5 +591,68 @@ impl Il2CppExecutor {
             return metadata.generic_parameters.get(param_index as usize).cloned();
         }
         None
+    }
+
+    pub fn get_rgctx_definition_for_type(
+        &self,
+        image_name: &str,
+        type_def: &Il2CppTypeDefinition,
+        metadata: &Metadata,
+        il2cpp: &Il2Cpp,
+    ) -> Option<Vec<Il2CppRGCTXDefinition>> {
+        if il2cpp.version >= 24.2 {
+            if let Some(module_dic) = il2cpp.rgctxs_dictionary.get(image_name) {
+                return module_dic.get(&type_def.token).cloned();
+            }
+            None
+        } else {
+            if type_def.rgctx_count > 0 && type_def.rgctx_start_index >= 0 {
+                let start = type_def.rgctx_start_index as usize;
+                let count = type_def.rgctx_count as usize;
+                if start + count <= metadata.rgctx_entries.len() {
+                    return Some(metadata.rgctx_entries[start..start + count].to_vec());
+                }
+            }
+            None
+        }
+    }
+
+    pub fn get_rgctx_definition_for_method(
+        &self,
+        image_name: &str,
+        method_def: &Il2CppMethodDefinition,
+        metadata: &Metadata,
+        il2cpp: &Il2Cpp,
+    ) -> Option<Vec<Il2CppRGCTXDefinition>> {
+        if il2cpp.version >= 24.2 {
+            if let Some(module_dic) = il2cpp.rgctxs_dictionary.get(image_name) {
+                return module_dic.get(&method_def.token).cloned();
+            }
+            None
+        } else {
+            if method_def.rgctx_count > 0 && method_def.rgctx_start_index >= 0 {
+                let start = method_def.rgctx_start_index as usize;
+                let count = method_def.rgctx_count as usize;
+                if start + count <= metadata.rgctx_entries.len() {
+                    return Some(metadata.rgctx_entries[start..start + count].to_vec());
+                }
+            }
+            None
+        }
+    }
+
+    pub fn get_method_spec_generic_context(
+        &self,
+        method_spec_index: usize,
+        il2cpp: &Il2Cpp,
+    ) -> (u64, u64) {
+        let method_spec = &il2cpp.method_specs[method_spec_index];
+        let class_inst_pointer = if method_spec.class_index_index >= 0 {
+            il2cpp.generic_inst_pointers.get(method_spec.class_index_index as usize).copied().unwrap_or(0)
+        } else { 0 };
+        let method_inst_pointer = if method_spec.method_index_index >= 0 {
+            il2cpp.generic_inst_pointers.get(method_spec.method_index_index as usize).copied().unwrap_or(0)
+        } else { 0 };
+        (class_inst_pointer, method_inst_pointer)
     }
 }

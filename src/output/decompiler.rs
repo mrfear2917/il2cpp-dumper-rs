@@ -83,7 +83,12 @@ impl Il2CppDecompiler {
         }
 
         let namespace = metadata.get_string_from_index(type_def.namespace_index)?;
-        writeln!(buf, "\n// Namespace: {namespace}").ok();
+        if config.dump_assembly_name {
+            writeln!(buf, "\n// Dll : {image_name}").ok();
+        } else {
+            writeln!(buf).ok();
+        }
+        writeln!(buf, "// Namespace: {namespace}").ok();
 
         if config.dump_attribute {
             Self::write_custom_attributes(
