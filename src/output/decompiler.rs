@@ -413,7 +413,8 @@ impl Il2CppDecompiler {
                     writeln!(buf, "\t|").ok();
                     if *ptr > 0 {
                         let rva = il2cpp.get_rva(*ptr);
-                        writeln!(buf, "\t|-RVA: 0x{rva:X} VA: 0x{ptr:X}").ok();
+                        let offset = il2cpp.map_vatr(*ptr).unwrap_or(rva);
+                        writeln!(buf, "\t|-RVA: 0x{rva:X} Offset: 0x{offset:X} VA: 0x{ptr:X}").ok();
                     } else {
                         writeln!(buf, "\t|-RVA: -1 Offset: -1").ok();
                     }

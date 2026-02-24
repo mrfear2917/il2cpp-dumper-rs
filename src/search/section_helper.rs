@@ -18,6 +18,7 @@ pub struct SectionHelper<'a> {
     data: &'a [u8],
     is_32bit: bool,
     version: f64,
+    is_elf: bool,
     _sections: Vec<SearchSection>,
     data_sections: Vec<SearchSection>,
     code_sections: Vec<SearchSection>,
@@ -34,6 +35,7 @@ impl<'a> SectionHelper<'a> {
         data: &'a [u8],
         is_32bit: bool,
         version: f64,
+        is_elf: bool,
         sections: Vec<SearchSection>,
         data_sections: Vec<SearchSection>,
         code_sections: Vec<SearchSection>,
@@ -47,6 +49,7 @@ impl<'a> SectionHelper<'a> {
             data,
             is_32bit,
             version,
+            is_elf,
             _sections: sections,
             data_sections,
             code_sections,
@@ -65,16 +68,25 @@ impl<'a> SectionHelper<'a> {
 
     pub fn find_code_registration(&mut self) -> Option<u64> {
         if self.version >= 24.2 {
-            let result = self.find_code_registration_2019(&true);
-            if result.is_some() {
-                self.pointer_in_exec = true;
-                return result;
+            if self.is_elf {
+                let result = self.find_code_registration_2019(&true);
+                if result.is_some() {
+                    self.pointer_in_exec = true;
+                    return result;
+                }
+                return self.find_code_registration_2019(&false);
+            } else {
+                let result = self.find_code_registration_2019(&false);
+                if result.is_some() {
+                    return result;
+                }
+                let result = self.find_code_registration_2019(&true);
+                if result.is_some() {
+                    self.pointer_in_exec = true;
+                    return result;
+                }
+                return None;
             }
-            let result = self.find_code_registration_2019(&false);
-            if result.is_some() {
-                return result;
-            }
-            return None;
         }
         self.find_code_registration_old()
     }
@@ -371,24 +383,52 @@ impl<'a> SectionHelper<'a> {
         if offset + ptr_size > self.data.len() {
             return false;
         }
-        let next_ptr = self.read_ptr_at(offset + ptr_size);
-        if let Some(ptr) = next_ptr {
-            self.is_in_data_sections(ptr) || self.is_in_code_sections(ptr)
-        } else {
-            false
+        let pointer_va = match self.read_ptr_at(offset + ptr_size) {
+            Some(p) if p > 0 => p,
+            _ => return false,
+        };
+        let pointer_offset = match self.va_to_offset_data(pointer_va) {
+            Some(o) => o,
+            None => return self.is_in_code_sections(pointer_va),
+        };
+        let check_count = std::cmp::min(self.method_count, 100);
+        for i in 0..check_count {
+            let entry_offset = pointer_offset + i * ptr_size;
+            if entry_offset + ptr_size > self.data.len() {
+                return false;
+            }
+            match self.read_ptr_at(entry_offset) {
+                Some(ptr) if self.is_in_code_sections(ptr) => {}
+                _ => return false,
+            }
         }
+        true
     }
 
     fn is_valid_metadata_registration(&self, _addr: u64, offset: usize, ptr_size: usize) -> bool {
         if offset + ptr_size > self.data.len() {
             return false;
         }
-        let next_ptr = self.read_ptr_at(offset + ptr_size);
-        if let Some(ptr) = next_ptr {
-            self.is_in_data_sections(ptr) || self.is_in_bss_sections(ptr)
-        } else {
-            false
+        let pointer_va = match self.read_ptr_at(offset + ptr_size) {
+            Some(p) if p > 0 => p,
+            _ => return false,
+        };
+        let pointer_offset = match self.va_to_offset_data(pointer_va) {
+            Some(o) => o,
+            None => return self.is_in_bss_sections(pointer_va),
+        };
+        let check_count = std::cmp::min(self.type_definitions_count, 100);
+        for i in 0..check_count {
+            let entry_offset = pointer_offset + i * ptr_size;
+            if entry_offset + ptr_size > self.data.len() {
+                return false;
+            }
+            match self.read_ptr_at(entry_offset) {
+                Some(ptr) if self.is_in_data_sections(ptr) || self.is_in_bss_sections(ptr) => {}
+                _ => return false,
+            }
         }
+        true
     }
 
     fn is_in_data_sections(&self, addr: u64) -> bool {

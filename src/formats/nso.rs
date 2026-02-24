@@ -380,6 +380,7 @@ impl Nso {
             self.stream.data(),
             self.is_32bit,
             version,
+            true,
             all,
             data_list,
             exec_list,

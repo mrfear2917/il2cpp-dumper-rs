@@ -239,6 +239,7 @@ impl Wasm {
             self.stream.data(),
             self.is_32bit,
             version,
+            false,
             all,
             data_list,
             exec_list,

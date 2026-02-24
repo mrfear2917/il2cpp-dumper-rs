@@ -255,6 +255,7 @@ impl Pe {
             self.stream.data(),
             self.is_32bit,
             version,
+            false,
             all_sections,
             data_list,
             exec_list,

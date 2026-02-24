@@ -574,6 +574,7 @@ impl Elf {
             self.stream.data(),
             self.is_32bit,
             self.stream.version,
+            true,
             all_sections,
             data_list,
             exec_list,
