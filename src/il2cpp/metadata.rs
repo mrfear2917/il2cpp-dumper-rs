@@ -408,7 +408,7 @@ impl Metadata {
         lists: &[Il2CppMetadataUsageList],
         pairs: &[Il2CppMetadataUsagePair],
     ) {
-        for i in 1..=6u32 {
+        for i in 1..=7u32 {
             self.metadata_usage_dic.insert(i, HashMap::new());
         }
 
@@ -426,7 +426,7 @@ impl Metadata {
                     pair.encoded_source_index & 0x1FFFFFFF
                 };
 
-                if usage >= 1 && usage <= 6 {
+                if usage >= 1 && usage <= 7 {
                     if let Some(dic) = self.metadata_usage_dic.get_mut(&usage) {
                         dic.insert(pair.destination_index, decoded);
                     }

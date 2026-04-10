@@ -173,6 +173,7 @@ pub enum Il2CppMetadataUsage {
     FieldInfo = 4,
     StringLiteral = 5,
     MethodRef = 6,
+    FieldRva = 7,
 }
 
 impl Il2CppMetadataUsage {
@@ -184,6 +185,7 @@ impl Il2CppMetadataUsage {
             4 => Some(Self::FieldInfo),
             5 => Some(Self::StringLiteral),
             6 => Some(Self::MethodRef),
+            7 => Some(Self::FieldRva),
             _ => None,
         }
     }

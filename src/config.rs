@@ -19,6 +19,7 @@ pub struct Config {
     pub force_version: f64,
     pub force_dump: bool,
     pub no_redirected_pointer: bool,
+    pub split_dump_per_type: bool,
 }
 
 impl Default for Config {
@@ -40,6 +41,7 @@ impl Default for Config {
             force_version: 24.3,
             force_dump: false,
             no_redirected_pointer: false,
+            split_dump_per_type: true,
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::path::Path;
@@ -32,17 +32,81 @@ impl Il2CppDecompiler {
             writeln!(buf, "// Image {idx}: {name} - {type_start}").ok();
         }
 
+        let split_root = if config.split_dump_per_type {
+            let p = Path::new(output_dir).join("DiffableCs");
+            if p.exists() {
+                fs::remove_dir_all(&p).ok();
+            }
+            fs::create_dir_all(&p)?;
+            Some(p)
+        } else {
+            None
+        };
+
+        let mut created_dirs = HashSet::new();
+
         let image_defs = metadata.image_defs.clone();
         for (img_idx, image_def) in image_defs.iter().enumerate() {
             let image_name = metadata.get_string_from_index(image_def.name_index)?;
             let type_end = image_def.type_start as usize + image_def.type_count as usize;
 
             for type_def_index in image_def.type_start as usize..type_end {
+                // Classic dump.cs (flat structure, exactly matching original)
                 if let Err(e) = Self::dump_type(
                     &mut buf, executor, metadata, il2cpp, config,
-                    type_def_index, img_idx, &image_name,
+                    type_def_index, img_idx, &image_name, "", false,
                 ) {
                     writeln!(buf, "/*\n{e}\n*/\n}}").ok();
+                }
+
+                // Diffable C# Split output (combined nested structure)
+                if let Some(ref root) = split_root {
+                    let type_def_ref = &metadata.type_defs[type_def_index];
+                    
+                    // Skip nested types (they will be recursed inside their parent)
+                    if type_def_ref.declaring_type_index >= 0 {
+                        continue;
+                    }
+
+                    let namespace_idx = type_def_ref.namespace_index;
+                    let name_idx = type_def_ref.name_index;
+                    
+                    let namespace = metadata.get_string_from_index(namespace_idx).unwrap_or_default();
+                    let type_name = metadata.get_string_from_index(name_idx).unwrap_or_default();
+
+                    let assembly_name = image_name.trim_end_matches(".dll");
+                    let dir = if namespace.is_empty() {
+                        root.join(assembly_name)
+                    } else {
+                        root.join(assembly_name).join(namespace.replace('.', std::path::MAIN_SEPARATOR_STR))
+                    };
+                    
+                    let dir_str = dir.to_string_lossy().to_string();
+                    if !created_dirs.contains(&dir_str) {
+                        fs::create_dir_all(&dir)?;
+                        created_dirs.insert(dir_str);
+                    }
+
+                    let safe_name = type_name
+                        .replace('<', "_")
+                        .replace('>', "_")
+                        .replace('|', "_")
+                        .replace('/', "_")
+                        .replace('\\', "_")
+                        .replace(':', "_")
+                        .replace('*', "_")
+                        .replace('?', "_")
+                        .replace('"', "_");
+                    let file_path = dir.join(format!("{safe_name}.cs"));
+
+                    let mut type_buf = String::with_capacity(4096);
+                    if let Err(e) = Self::dump_type(
+                        &mut type_buf, executor, metadata, il2cpp, config,
+                        type_def_index, img_idx, &image_name, "", true,
+                    ) {
+                        writeln!(type_buf, "/*\n{e}\n*/\n}}").ok();
+                    }
+                    fs::write(file_path, type_buf)?;
                 }
             }
         }
@@ -60,6 +124,8 @@ impl Il2CppDecompiler {
         type_def_index: usize,
         image_index: usize,
         image_name: &str,
+        indent: &str,
+        dump_nested: bool,
     ) -> Result<()> {
         let type_def = metadata.type_defs[type_def_index].clone();
         let mut extends = Vec::new();
@@ -84,24 +150,25 @@ impl Il2CppDecompiler {
 
         let namespace = metadata.get_string_from_index(type_def.namespace_index)?;
         if config.dump_assembly_name {
-            writeln!(buf, "\n// Dll : {image_name}").ok();
+            writeln!(buf, "\n{indent}// Dll : {image_name}").ok();
         } else {
-            writeln!(buf).ok();
+            writeln!(buf, "\n{indent}").ok();
         }
-        writeln!(buf, "// Namespace: {namespace}").ok();
+        writeln!(buf, "{indent}// Namespace: {namespace}").ok();
 
         if config.dump_attribute {
             Self::write_custom_attributes(
                 buf, executor, metadata, il2cpp,
-                image_index, type_def.custom_attribute_index, type_def.token, "",
+                image_index, type_def.custom_attribute_index, type_def.token, indent,
             );
 
             if (type_def.flags & type_attributes::SERIALIZABLE) != 0 {
-                writeln!(buf, "[Serializable]").ok();
+                writeln!(buf, "{indent}[Serializable]").ok();
             }
         }
 
         let visibility = type_def.flags & type_attributes::VISIBILITY_MASK;
+        buf.push_str(indent);
         buf.push_str(&get_type_visibility(visibility));
 
         if (type_def.flags & type_attributes::ABSTRACT) != 0
@@ -128,32 +195,51 @@ impl Il2CppDecompiler {
             buf.push_str("class ");
         }
 
-        let type_name = executor.get_type_def_name(&type_def, type_def_index, metadata, il2cpp, false, true);
-        buf.push_str(&type_name);
+        let type_name_raw = executor.get_type_def_name(&type_def, type_def_index, metadata, il2cpp, false, true);
+        
+        // Strip parent namespace prefixes from nested classes for clean inner definitions
+        let display_name = if type_def.declaring_type_index >= 0 {
+            let parts: Vec<&str> = type_name_raw.split('.').collect();
+            parts.last().unwrap_or(&type_name_raw.as_str()).to_string()
+        } else {
+            type_name_raw
+        };
+        
+        buf.push_str(&display_name);
 
         if !extends.is_empty() {
             write!(buf, " : {}", extends.join(", ")).ok();
         }
 
         if config.dump_type_def_index {
-            writeln!(buf, " // TypeDefIndex: {type_def_index}\n{{").ok();
+            writeln!(buf, " // TypeDefIndex: {type_def_index}\n{indent}{{").ok();
         } else {
-            writeln!(buf, "\n{{").ok();
+            writeln!(buf, "\n{indent}{{").ok();
         }
 
         if config.dump_field && type_def.field_count > 0 {
-            Self::dump_fields(buf, executor, metadata, il2cpp, config, &type_def, type_def_index, image_index)?;
+            Self::dump_fields(buf, executor, metadata, il2cpp, config, &type_def, type_def_index, image_index, indent)?;
         }
 
         if config.dump_property && type_def.property_count > 0 {
-            Self::dump_properties(buf, executor, metadata, il2cpp, config, &type_def, image_index)?;
+            Self::dump_properties(buf, executor, metadata, il2cpp, config, &type_def, image_index, indent)?;
         }
 
         if config.dump_method && type_def.method_count > 0 {
-            Self::dump_methods(buf, executor, metadata, il2cpp, config, &type_def, image_name, image_index)?;
+            Self::dump_methods(buf, executor, metadata, il2cpp, config, &type_def, image_name, image_index, indent)?;
         }
 
-        writeln!(buf, "}}").ok();
+        if dump_nested && type_def.nested_type_count > 0 {
+            let next_indent = format!("{indent}\t");
+            for i in 0..type_def.nested_type_count as usize {
+                let nested_idx = metadata.nested_type_indices[type_def.nested_types_start as usize + i];
+                if let Err(e) = Self::dump_type(buf, executor, metadata, il2cpp, config, nested_idx as usize, image_index, image_name, &next_indent, true) {
+                    writeln!(buf, "/* Error dumping nested type: {e} */").ok();
+                }
+            }
+        }
+
+        writeln!(buf, "{indent}}}").ok();
         Ok(())
     }
 
@@ -166,8 +252,9 @@ impl Il2CppDecompiler {
         type_def: &Il2CppTypeDefinition,
         type_def_index: usize,
         image_index: usize,
+        indent: &str,
     ) -> Result<()> {
-        writeln!(buf, "\n\t// Fields").ok();
+        writeln!(buf, "\n{indent}\t// Fields").ok();
         let field_end = type_def.field_start as usize + type_def.field_count as usize;
 
         for i in type_def.field_start as usize..field_end {
@@ -177,12 +264,14 @@ impl Il2CppDecompiler {
             let mut is_const = false;
 
             if config.dump_attribute {
+                let attr_indent = format!("{indent}\t");
                 Self::write_custom_attributes(
                     buf, executor, metadata, il2cpp,
-                    image_index, field_def.custom_attribute_index, field_def.token, "\t",
+                    image_index, field_def.custom_attribute_index, field_def.token, &attr_indent,
                 );
             }
 
+            buf.push_str(indent);
             buf.push('\t');
 
             let access = field_type.attrs & field_attributes::FIELD_ACCESS_MASK;
@@ -239,20 +328,23 @@ impl Il2CppDecompiler {
         config: &Config,
         type_def: &Il2CppTypeDefinition,
         image_index: usize,
+        indent: &str,
     ) -> Result<()> {
-        writeln!(buf, "\n\t// Properties").ok();
+        writeln!(buf, "\n{indent}\t// Properties").ok();
         let prop_end = type_def.property_start as usize + type_def.property_count as usize;
 
         for i in type_def.property_start as usize..prop_end {
             let property_def = metadata.property_defs[i].clone();
 
             if config.dump_attribute {
+                let attr_indent = format!("{indent}\t");
                 Self::write_custom_attributes(
                     buf, executor, metadata, il2cpp,
-                    image_index, property_def.custom_attribute_index, property_def.token, "\t",
+                    image_index, property_def.custom_attribute_index, property_def.token, &attr_indent,
                 );
             }
 
+            buf.push_str(indent);
             buf.push('\t');
 
             let property_type_name;
@@ -293,8 +385,9 @@ impl Il2CppDecompiler {
         type_def: &Il2CppTypeDefinition,
         image_name: &str,
         image_index: usize,
+        indent: &str,
     ) -> Result<()> {
-        writeln!(buf, "\n\t// Methods").ok();
+        writeln!(buf, "\n{indent}\t// Methods").ok();
         let method_end = type_def.method_start as usize + type_def.method_count as usize;
 
         for i in type_def.method_start as usize..method_end {
@@ -303,22 +396,23 @@ impl Il2CppDecompiler {
             let is_abstract = (method_def.flags as u32 & method_attributes::ABSTRACT) != 0;
 
             if config.dump_attribute {
+                let attr_indent = format!("{indent}\t");
                 Self::write_custom_attributes(
                     buf, executor, metadata, il2cpp,
-                    image_index, method_def.custom_attribute_index, method_def.token, "\t",
+                    image_index, method_def.custom_attribute_index, method_def.token, &attr_indent,
                 );
             }
 
             if config.dump_method_offset {
                 let method_pointer = il2cpp.get_method_pointer(image_name, &method_def);
                 if is_abstract {
-                    write!(buf, "\t// ").ok();
+                    write!(buf, "{indent}\t// ").ok();
                 } else if method_pointer > 0 {
                     let rva = il2cpp.get_rva(method_pointer);
                     let offset = il2cpp.map_vatr(method_pointer).unwrap_or(rva);
-                    write!(buf, "\t// RVA: 0x{rva:X} Offset: 0x{offset:X} VA: 0x{method_pointer:X}").ok();
+                    write!(buf, "{indent}\t// RVA: 0x{rva:X} Offset: 0x{offset:X} VA: 0x{method_pointer:X}").ok();
                 } else {
-                    write!(buf, "\t// RVA: -1 Offset: -1").ok();
+                    write!(buf, "{indent}\t// RVA: -1 Offset: -1").ok();
                 }
                 if method_def.slot != 0xFFFF {
                     write!(buf, " Slot: {}", method_def.slot).ok();
@@ -326,6 +420,7 @@ impl Il2CppDecompiler {
                 writeln!(buf).ok();
             }
 
+            buf.push_str(indent);
             buf.push('\t');
             let mods = executor.get_modifiers(method_def.flags as u32).to_string();
             buf.push_str(&mods);
@@ -403,7 +498,7 @@ impl Il2CppDecompiler {
             }
 
             if let Some(method_specs) = il2cpp.method_definition_method_specs.get(&i).cloned() {
-                writeln!(buf, "\t/* GenericInstMethod :").ok();
+                writeln!(buf, "{indent}\t/* GenericInstMethod :").ok();
 
                 let mut groups: HashMap<u64, Vec<usize>> = HashMap::new();
                 for spec_idx in &method_specs {
@@ -412,22 +507,22 @@ impl Il2CppDecompiler {
                 }
 
                 for (ptr, spec_indices) in &groups {
-                    writeln!(buf, "\t|").ok();
+                    writeln!(buf, "{indent}\t|").ok();
                     if *ptr > 0 {
                         let rva = il2cpp.get_rva(*ptr);
                         let offset = il2cpp.map_vatr(*ptr).unwrap_or(rva);
-                        writeln!(buf, "\t|-RVA: 0x{rva:X} Offset: 0x{offset:X} VA: 0x{ptr:X}").ok();
+                        writeln!(buf, "{indent}\t|-RVA: 0x{rva:X} Offset: 0x{offset:X} VA: 0x{ptr:X}").ok();
                     } else {
-                        writeln!(buf, "\t|-RVA: 0x0 Offset: 0x0").ok();
+                        writeln!(buf, "{indent}\t|-RVA: 0x0 Offset: 0x0").ok();
                     }
 
                     for spec_idx in spec_indices {
                         let (type_name, method_name) = executor.get_method_spec_name(*spec_idx, metadata, il2cpp, false);
-                        writeln!(buf, "\t|-{type_name}.{method_name}").ok();
+                        writeln!(buf, "{indent}\t|-{type_name}.{method_name}").ok();
                     }
                 }
 
-                writeln!(buf, "\t*/").ok();
+                writeln!(buf, "{indent}\t*/").ok();
             }
         }
         Ok(())

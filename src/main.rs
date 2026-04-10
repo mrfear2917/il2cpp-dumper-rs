@@ -492,18 +492,20 @@ fn detect_format(data: &[u8]) -> &'static str {
         _ => "unknown",
     }
 }
-
 fn run() -> Result<()> {
     let start_time = Instant::now();
     let cli = Cli::parse();
 
-    let config = if let Some(ref cp) = cli.config {
-        Config::load_from_file(cp).unwrap_or_else(|e| {
-            eprintln!("Warning: Failed to load config: {e}. Using defaults.");
+    let config = if let Some(config_path) = &cli.config {
+        Config::load_from_file(config_path).unwrap_or_else(|e| {
+            eprintln!("Warning: Failed to load config from {}: {}", config_path, e);
             Config::default()
         })
     } else if std::path::Path::new("config.json").exists() {
-        Config::load_from_file("config.json").unwrap_or_default()
+        Config::load_from_file("config.json").unwrap_or_else(|e| {
+            eprintln!("Warning: Failed to load config.json: {}", e);
+            Config::default()
+        })
     } else {
         Config::default()
     };
