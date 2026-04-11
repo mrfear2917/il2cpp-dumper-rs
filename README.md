@@ -13,19 +13,23 @@ A blazing-fast, cross-platform IL2CPP binary dumper written in Rust. Full rewrit
 | **il2cpp.h struct gen** | ⚠️ Basic | ✅ Full | ✅ Full |
 | **script.json** | ✅ Yes | ✅ Yes | ✅ Yes |
 | **stringliteral.json** | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Split Dump Per Type (DiffableCS)** | ❌ No | ❌ No | ✅ **Yes (parallel)** |
+| **Variable-width indices (v39/Unity 6)** | ❌ No | ❌ No | ✅ **Yes** |
+| **Auto-XOR Metadata Decryption** | ❌ No | ❌ No | ✅ **Yes** |
+| **Latest Unity Formats (v104, v106)** | ❌ No | ❌ No | ✅ **Yes** |
 | **Assembly name in dump.cs** | ❌ No | ❌ No | ✅ **Yes** |
 | **Unity version detection** | ❌ No | ❌ No | ✅ **Auto-detect** |
 | **Fat Mach-O (Universal)** | ❌ No | ✅ Yes | ✅ Yes |
 | **WASM (WebGL)** | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Dump file support** | ❌ No | ✅ Yes | ✅ Yes (+ ELF reload) |
 | **v27+ ImageBase fix** | ❌ No | ✅ Yes | ✅ Yes |
-| **Parallel I/O** | ❌ No | ❌ No | ✅ **rayon** |
+| **Parallel I/O (`rayon`)** | ❌ No | ❌ No | ✅ **Yes (DummyDLL & DiffableCS)** |
 | **Auto-numbered output dirs** | ❌ No | ❌ No | ✅ **Dump0/, Dump1/...** |
 | **Execution timer** | ❌ No | ❌ No | ✅ **Done! (8.35s)** |
 | **Cross-platform binary** | ⚠️ Needs Python | ⚠️ Needs .NET | ✅ **Standalone** |
 | **Web UI** | ✅ Flask | ❌ No | ❌ No |
-| **GUI** | ❌ No | ✅ WinForms | ❌ CLI-only |
-| **Embeddable as library** | ❌ No | ❌ No | ✅ **Rust crate** |
+| **GUI** | ❌ No | ✅ WinForms | ✅ **Jetpack Compose (Android)** |
+| **Embeddable as library** | ❌ No | ❌ No | ✅ **Rust crate / JNI** |
 
 ### ⚡ Performance Comparison
 
@@ -35,8 +39,8 @@ A blazing-fast, cross-platform IL2CPP binary dumper written in Rust. Full rewrit
 | Binary loading | ~5.2s | ~3s | **~0.8s** |
 | Search & Init | ~5.4s | ~2s | **~0.3s** |
 | dump.cs | ~14s | ~5s | **~2s** |
-| Struct generation | ~6.4s | ~3s | **~1.5s** |
-| DummyDLL | ❌ N/A | ~5s | **~3.5s** |
+| Struct generation | ~6.4s | ~5s | **~3.5s** |
+| DummyDLL | ❌ N/A | ~3s | **~1.5s** |
 | **Total** | **~35s** | **~20s** | **~8.35s** |
 
 > **4x faster than Python, 2.4x faster than C#** — on the same binary.
@@ -47,10 +51,11 @@ A blazing-fast, cross-platform IL2CPP binary dumper written in Rust. Full rewrit
 
 ### Core Dumping
 - **dump.cs** — Full C# class/method/field/property decompilation with RVA/VA/Offset addresses and assembly (image) names
+- **DiffableCs (Split Dump Per Type)** — Automatically splits classes into beautifully formatted, individual `.cs` files sorted by Namespace. Powered by `rayon` parallel processing for instant SSD write speeds.
 - **script.json** — Method addresses and signatures for IDA/Ghidra scripting
 - **il2cpp.h** — C struct definitions for native analysis
 - **stringliteral.json** — All string literal values and indices
-- **DummyDLL** — Reconstructed .NET assemblies for dnSpy/ILSpy analysis
+- **DummyDLL** — Reconstructed .NET assemblies for dnSpy/ILSpy analysis (parallelized bounding)
 
 ### Supported Formats
 
@@ -64,8 +69,10 @@ A blazing-fast, cross-platform IL2CPP binary dumper written in Rust. Full rewrit
 | WebGL | WASM | ✅ |
 
 ### IL2CPP Version Support
-- **v16 – v31+** (Unity 5.3 through Unity 2023+)
-- Automatic version detection from metadata
+- **v16 – v39** (Unity 5.3 through Unity 6 inclusive)
+- **Variable-Width Indices** natively supported for v39/Unity 6 formats
+- **Latest Unity Formats:** Native support for the newest undocumented metadata versions like `v104` and `v106`.
+- **Automatic Metadata Decryption:** On-the-fly automated 1-byte and 4-byte XOR key sniffing and decryption against the `AF 1B B1 FA` magic header for quickly dumping protected `.dat` files.
 - Manual version override via config
 
 ### Search Strategies

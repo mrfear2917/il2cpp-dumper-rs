@@ -44,6 +44,7 @@ impl Il2CppDecompiler {
         };
 
         let mut created_dirs = HashSet::new();
+        let mut split_file_outputs = Vec::new();
 
         let image_defs = metadata.image_defs.clone();
         for (img_idx, image_def) in image_defs.iter().enumerate() {
@@ -106,10 +107,17 @@ impl Il2CppDecompiler {
                     ) {
                         writeln!(type_buf, "/*\n{e}\n*/\n}}").ok();
                     }
-                    fs::write(file_path, type_buf)?;
+                    split_file_outputs.push((file_path, type_buf));
                 }
             }
         }
+
+        use rayon::prelude::*;
+        split_file_outputs.par_iter().for_each(|(file_path, content)| {
+            if let Err(e) = fs::write(file_path, content) {
+                eprintln!("WARNING: Failed to write diffable cs: {e}");
+            }
+        });
 
         fs::write(output_path, buf)?;
         Ok(())
@@ -149,10 +157,19 @@ impl Il2CppDecompiler {
         }
 
         let namespace = metadata.get_string_from_index(type_def.namespace_index)?;
-        if config.dump_assembly_name {
-            writeln!(buf, "\n{indent}// Dll : {image_name}").ok();
+
+        if buf.is_empty() {
+            if config.dump_assembly_name {
+                writeln!(buf, "{indent}// Dll : {image_name}").ok();
+            } else {
+                buf.push_str(indent);
+            }
         } else {
-            writeln!(buf, "\n{indent}").ok();
+            if config.dump_assembly_name {
+                writeln!(buf, "\n{indent}// Dll : {image_name}").ok();
+            } else {
+                writeln!(buf, "\n{indent}").ok();
+            }
         }
         writeln!(buf, "{indent}// Namespace: {namespace}").ok();
 
@@ -229,17 +246,18 @@ impl Il2CppDecompiler {
             Self::dump_methods(buf, executor, metadata, il2cpp, config, &type_def, image_name, image_index, indent)?;
         }
 
+        writeln!(buf, "{indent}}}").ok();
+
         if dump_nested && type_def.nested_type_count > 0 {
-            let next_indent = format!("{indent}\t");
             for i in 0..type_def.nested_type_count as usize {
                 let nested_idx = metadata.nested_type_indices[type_def.nested_types_start as usize + i];
-                if let Err(e) = Self::dump_type(buf, executor, metadata, il2cpp, config, nested_idx as usize, image_index, image_name, &next_indent, true) {
+                // Pass the original non-indented string to avoid horizontal spacing
+                if let Err(e) = Self::dump_type(buf, executor, metadata, il2cpp, config, nested_idx as usize, image_index, image_name, indent, true) {
                     writeln!(buf, "/* Error dumping nested type: {e} */").ok();
                 }
             }
         }
 
-        writeln!(buf, "{indent}}}").ok();
         Ok(())
     }
 
