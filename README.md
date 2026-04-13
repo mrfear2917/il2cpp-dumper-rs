@@ -19,6 +19,10 @@ A blazing-fast, cross-platform IL2CPP binary dumper written in Rust. Full rewrit
 | **Latest Unity Formats (v104, v106)** | ❌ No | ❌ No | ✅ **Yes** |
 | **Assembly name in dump.cs** | ❌ No | ❌ No | ✅ **Yes** |
 | **Unity version detection** | ❌ No | ❌ No | ✅ **Auto-detect** |
+| **Inline Disassembly (ARM64/ARM32/x86/x64)** | ❌ No | ❌ No | ✅ **Yes** |
+| **Control Flow Graph (CFG) Analysis** | ❌ No | ❌ No | ✅ **Yes** |
+| **Metadata Annotations (strings, types, vtable)** | ❌ No | ❌ No | ✅ **Yes** |
+| **Semantic Variable Tracking** | ❌ No | ❌ No | ✅ **Yes** |
 | **Fat Mach-O (Universal)** | ❌ No | ✅ Yes | ✅ Yes |
 | **WASM (WebGL)** | ✅ Yes | ✅ Yes | ✅ Yes |
 | **Dump file support** | ❌ No | ✅ Yes | ✅ Yes (+ ELF reload) |
@@ -51,11 +55,19 @@ A blazing-fast, cross-platform IL2CPP binary dumper written in Rust. Full rewrit
 
 ### Core Dumping
 - **dump.cs** — Full C# class/method/field/property decompilation with RVA/VA/Offset addresses and assembly (image) names
+- **Inline Disassembly** — Optional per-method native assembly output embedded directly in dump.cs method bodies
 - **DiffableCs (Split Dump Per Type)** — Automatically splits classes into beautifully formatted, individual `.cs` files sorted by Namespace. Powered by `rayon` parallel processing for instant SSD write speeds.
 - **script.json** — Method addresses and signatures for IDA/Ghidra scripting
 - **il2cpp.h** — C struct definitions for native analysis
 - **stringliteral.json** — All string literal values and indices
 - **DummyDLL** — Reconstructed .NET assemblies for dnSpy/ILSpy analysis (parallelized bounding)
+
+### Disassembly Engine
+- **Multi-Architecture** — ARM64 (`yaxpeax-arm`), ARM32, x86/x64 (`iced-x86`)
+- **Control Flow Graph (CFG)** — Automatic basic block detection, branch targets, loop back-edges, and `if (condition)` reconstruction
+- **Metadata Annotations** — String literals, type info, method references, field references, and vtable slot resolution resolved via `ADRP+LDR` patterns
+- **Semantic Variable Tracking** — Maps registers to parameter names (e.g., `X0` → `this`, `X1` → `arg0`) using IL2CPP ABI and method metadata
+- **Configurable** — Toggle hex bytes, field names, annotations, and CFG independently; cap max instructions per method
 
 ### Supported Formats
 
@@ -155,7 +167,13 @@ Create a `config.json` in the working directory (or use `--config`):
   "NoRedirectedPointer": false,
   "GenerateStruct": true,
   "GenerateDummyDll": true,
-  "DummyDllAddToken": true
+  "DummyDllAddToken": true,
+  "dumpDisassembly": false,
+  "dumpDisassemblyHexBytes": true,
+  "dumpDisassemblyFieldNames": true,
+  "dumpDisassemblyAnnotations": true,
+  "dumpDisassemblyCfg": true,
+  "maxDisassemblyInstructions": 512
 }
 ```
 
@@ -180,8 +198,12 @@ il2cpp_dumper/src/
 ├── search/              # Registration search algorithms
 │   └── section_helper.rs
 ├── executor/            # IL2CPP type resolution engine
+├── disassembler/        # Multi-arch disassembly engine
+│   ├── mod.rs           # CFG analysis, annotations, formatting
+│   ├── arm.rs           # ARM64/ARM32 decoder (yaxpeax)
+│   └── x86.rs           # x86/x64 decoder (iced-x86)
 └── output/              # Output generators
-    ├── decompiler.rs              # dump.cs
+    ├── decompiler.rs              # dump.cs + inline disassembly
     ├── struct_generator.rs        # script.json, il2cpp.h
     └── dummy_assembly_generator.rs # DummyDLL (parallel)
 ```

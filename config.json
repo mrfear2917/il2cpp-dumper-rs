@@ -17,6 +17,7 @@
   "noRedirectedPointer": false,
   "splitDumpPerType": false,
   "dumpDisassembly": true,
+  "dumpDisassemblyTarget": 0,
   "dumpDisassemblyHexBytes": true,
   "dumpDisassemblyFieldNames": true,
   "dumpDisassemblyAnnotations": true,

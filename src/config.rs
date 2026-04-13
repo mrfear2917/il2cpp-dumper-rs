@@ -29,6 +29,7 @@ pub struct Config {
     pub dump_generics_vtables: bool,
     pub dump_generics_interfaces: bool,
     pub dump_disassembly: bool,
+    pub dump_disassembly_target: u8, // 0 = Both, 1 = Flat dump.cs, 2 = Split DiffableCs
     pub dump_disassembly_hex_bytes: bool,
     pub dump_disassembly_field_names: bool,
     pub dump_disassembly_annotations: bool,
@@ -65,6 +66,7 @@ impl Default for Config {
             dump_generics_vtables: true,
             dump_generics_interfaces: true,
             dump_disassembly: false,
+            dump_disassembly_target: 0,
             dump_disassembly_hex_bytes: true,
             dump_disassembly_field_names: true,
             dump_disassembly_annotations: true,

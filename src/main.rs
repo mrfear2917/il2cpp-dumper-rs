@@ -651,7 +651,9 @@ fn run() -> Result<()> {
     println!("Dumping...");
     let mut executor = Il2CppExecutor::new(&metadata, &mut il2cpp)?;
 
-    Il2CppDecompiler::decompile(&mut executor, &mut metadata, &mut il2cpp, &config, &output_dir)?;
+    Il2CppDecompiler::decompile(&mut executor, &mut metadata, &mut il2cpp, &config, &output_dir, |msg| {
+        println!("{msg}");
+    })?;
     println!("dump.cs generated");
 
     if config.generate_struct {

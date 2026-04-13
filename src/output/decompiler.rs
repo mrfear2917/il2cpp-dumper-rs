@@ -15,21 +15,22 @@ use crate::disassembler::{self, Disassembler, DisassemblyContext};
 pub struct Il2CppDecompiler;
 
 impl Il2CppDecompiler {
-    pub fn decompile(
+    pub fn decompile<L: FnMut(&str)>(
         executor: &mut Il2CppExecutor,
         metadata: &mut Metadata,
         il2cpp: &mut Il2Cpp,
         config: &Config,
         output_dir: &str,
+        mut logger: L,
     ) -> Result<()> {
         let output_path = Path::new(output_dir).join("dump.cs");
         let mut buf = String::with_capacity(1 << 20);
 
         let disasm = if config.dump_disassembly {
             let arch = il2cpp.detect_architecture();
-            println!("Disassembly enabled — architecture: {arch}");
+            logger(&format!("Disassembly enabled — architecture: {arch}"));
             let sorted_addrs = il2cpp.build_sorted_method_addresses();
-            println!("Building method address map ({} methods)...", sorted_addrs.len());
+            logger(&format!("Building method address map ({} methods)...", sorted_addrs.len()));
 
             let mut rva_to_name: HashMap<u64, String> = HashMap::new();
             let image_defs_clone = metadata.image_defs.clone();
@@ -63,7 +64,7 @@ impl Il2CppDecompiler {
 
             let ann_count = disassembler.annotation_count();
             if ann_count > 0 {
-                println!("Built {} metadata annotations (strings, types, methods, fields)", ann_count);
+                logger(&format!("Built {} metadata annotations (strings, types, methods, fields)", ann_count));
             }
 
             Some((disassembler, sorted_addrs))
@@ -100,9 +101,15 @@ impl Il2CppDecompiler {
 
             for type_def_index in image_def.type_start as usize..type_end {
                 // Classic dump.cs (flat structure, exactly matching original)
+                let flat_disasm = if config.dump_disassembly_target == 0 || config.dump_disassembly_target == 1 {
+                    &disasm
+                } else {
+                    &None
+                };
+
                 if let Err(e) = Self::dump_type(
                     &mut buf, executor, metadata, il2cpp, config,
-                    type_def_index, img_idx, &image_name, "", false, &disasm,
+                    type_def_index, img_idx, &image_name, "", false, flat_disasm,
                 ) {
                     writeln!(buf, "/*\n{e}\n*/\n}}").ok();
                 }
@@ -148,9 +155,15 @@ impl Il2CppDecompiler {
                     let file_path = dir.join(format!("{safe_name}.cs"));
 
                     let mut type_buf = String::with_capacity(4096);
+                    let split_disasm = if config.dump_disassembly_target == 0 || config.dump_disassembly_target == 2 {
+                        &disasm
+                    } else {
+                        &None
+                    };
+
                     if let Err(e) = Self::dump_type(
                         &mut type_buf, executor, metadata, il2cpp, config,
-                        type_def_index, img_idx, &image_name, "", true, &disasm,
+                        type_def_index, img_idx, &image_name, "", true, split_disasm,
                     ) {
                         writeln!(type_buf, "/*\n{e}\n*/\n}}").ok();
                     }
