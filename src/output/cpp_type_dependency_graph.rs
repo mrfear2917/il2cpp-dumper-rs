@@ -265,9 +265,6 @@ impl CppTypeDependencyGraph {
                     None => break,
                 };
 
-                // Only queued (i.e. emitted) types can block emission order.
-                // Primitive/external helper nodes are represented in the graph,
-                // but are never emitted as top-level types.
                 let has_blocking_value_dep = self.nodes[node_id.0]
                     .outgoing_value
                     .iter()
