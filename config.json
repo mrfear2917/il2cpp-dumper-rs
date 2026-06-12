@@ -37,8 +37,8 @@
   "generateUnityHeaders": true,
   "compilerLayout": "GCC",
   "useTopologicalSort": true,
-  "codm": false,
-  "dumpStaticFieldMetadata": false,
-  "dumpFieldRvaData": false,
+  "codm": true,
+  "dumpStaticFieldMetadata": true,
+  "dumpFieldRvaData": true,
   "maxFieldRvaDumpBytes": 4096
 }

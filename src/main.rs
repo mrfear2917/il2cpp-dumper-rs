@@ -445,15 +445,16 @@ fn init_elf(data: Vec<u8>, metadata: &Metadata, config: &Config) -> Result<Il2Cp
         print_address("MetadataRegistration", mr);
     }
 
-    let mut found = elf.auto_plus_init(code_reg, metadata_reg)?;
+    let mut found = elf.auto_plus_init(code_reg, metadata_reg).unwrap_or(false);
 
     if !found {
         if let Ok(Some((cr, mr))) = elf.symbol_search() {
             print_detection("Symbol table");
             print_address("CodeRegistration", cr);
             print_address("MetadataRegistration", mr);
-            elf.init(cr, mr)?;
-            found = true;
+            if elf.init(cr, mr).is_ok() {
+                found = true;
+            }
         }
     }
 
@@ -462,8 +463,9 @@ fn init_elf(data: Vec<u8>, metadata: &Metadata, config: &Config) -> Result<Il2Cp
             print_detection("ARM32 search pattern");
             print_address("CodeRegistration", cr);
             print_address("MetadataRegistration", mr);
-            elf.init(cr, mr)?;
-            found = true;
+            if elf.init(cr, mr).is_ok() {
+                found = true;
+            }
         }
     }
 

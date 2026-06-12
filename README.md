@@ -4,7 +4,7 @@
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
 </p>
 
-<h1 align="center">🛡️ Rodroid Il2CppDumper V6</h1>
+<h1 align="center">🛡️ Rodroid Il2CppDumper V6.1</h1>
 
 <p align="center">
   <b>A blazing-fast, cross-platform IL2CPP binary dumper written in Rust.</b><br/>
@@ -15,6 +15,10 @@
   <a href="https://t.me/+WmudnO0-xoNhMDQ8">📢 Telegram Channel</a> &nbsp;·&nbsp;
   <a href="https://t.me/+QylrYL1GNsJiYjc0">💬 Telegram Group</a> &nbsp;·&nbsp;
   <b>Dev:</b> <a href="https://t.me/rodroidmods"><code>@rodroidmods</code></a>
+</p>
+<p align="center">
+  <a href="https://github.com/rodroidmods/rodroid-il2cppdumper/releases">📥 <b>Download prebuilt releases</b></a> (APK, EXE, DMG, AppImage, DEB, RPM, IPA)<br/>
+  Available at <a href="https://github.com/rodroidmods/rodroid-il2cppdumper/releases">github.com/rodroidmods/rodroid-il2cppdumper/releases</a>
 </p>
 
 ---
@@ -147,6 +151,14 @@
   3. Current `type_enum` invalid + XOR'd `type_enum` valid (catches obfuscator-only patterns like `0x27 → Class`, `0x24 → ValueType`)
 - ~95 % of encrypted Il2CppType entries recovered (class names, value types, generic instances, field type references). The remaining ~5 % are **intentional decoy fields** with the `LITERAL` (0x40) attribute flag set on real instance fields — same limitation as the C# CODM dumper; not an encryption gap.
 - Toggle via `--codm` flag or `Codm: true` in config — additive code path, leaves standard Unity games untouched
+
+### What's new in v6.1
+
+#### CODM resilient initialization
+- 🐛 **Fixed CODM disk-based dumps crashing with "Auto mode failed"** — CODM binaries have correct `CodeRegistration`/`MetadataRegistration` addresses, but some internal struct fields (e.g. `generic_method_pointers`, `invoker_pointers`) point to obfuscated/invalid addresses. Previously, any single unmappable pointer in `load_pointers`, `load_types`, or `load_generics` would abort the entire `init()`, causing all fallback strategies to fail even though the addresses were found correctly.
+- 🛡️ **CODM-conditional error resilience** — when `codm_diag` / `codm` is active, individual pointer loads now use `match`/skip instead of strict `?`. Bad pointers print a `[WARN]` and are skipped; the dump proceeds with whatever data IS available. Non-CODM games retain strict `?` error propagation so false-positive addresses are caught properly.
+- 🔄 **Affected files**: `formats/elf.rs` (`load_pointers`, `load_types`, `load_generics`), `il2cpp/base.rs` (`Il2Cpp::init` pointer loading), `main.rs` (CLI init flow fallback)
+- ✅ **All targets synced**: CLI, Tauri desktop/mobile, Android JNI — same engine fix across all platforms
 
 ### What's new in v6
 
